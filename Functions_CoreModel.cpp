@@ -1,6 +1,7 @@
 //
 // Created by Gleb Kichaev on 10/21/15.
-//
+// Modified by Chen on 02/27/17
+// add a new block to recreate ld matrix when ld solve unstable
 
 
 #include <unordered_map>
@@ -58,6 +59,20 @@ double MVN_Density_ZeroMean(VectorXd& x, MatrixXd& sigma){
     double log_det = -.5*log(sigma.determinant());
     return log_det + -.5*exponential_term;
 }
+
+void MVN_Density_ZeroMean_print(VectorXd& x, MatrixXd& sigma){
+    MatrixXd b;
+    b.setIdentity(sigma.rows(),sigma.cols());
+    MatrixXd sigma_inv = sigma.ldlt().solve(b);
+    cout << "sigma_inv:" << endl << sigma_inv << endl;
+    double exponential_term = x.transpose()*(sigma_inv*x);
+    cout << "sigma:" << endl << sigma << endl;
+    double log_det = -.5*log(sigma.determinant());
+    cout << "sigma.determinant:" << endl << log_det << endl;
+    log_det = log_det + -.5*exponential_term;
+    cout << "log_det:" << endl << log_det << endl;
+}
+
 
 int Sample_Int(mt19937 & generator ,vector<double>& weights){
     /* Function that is analagous to sample.int function in R */
@@ -150,20 +165,65 @@ double Calculate_LogBayesFactor(VectorXd& zscore, MatrixXd& ld_matrix, vector<in
         }
     }
     MatrixXd offset = ld_c+prior_variance*(ld_c*ld_c);
+
     double bf_num = MVN_Density_ZeroMean(zscores_c, offset);
     double bf_denom = MVN_Density_ZeroMean(zscores_c, ld_c);
-/*
-    if(isnan(bf_num-bf_denom)){
-      //  cout << "The offset matrix is:" << endl;
-      //  cout <<offset << endl;
+
+    while(std::isnan(bf_num-bf_denom)){
+     /*   cout << "ld_c:" << endl;
+        cout <<ld_c << endl;
+        cout << "The offset matrix is:" << endl;
+        cout <<offset << endl;
         cout << "num, denom" << endl;
         cout << bf_num << " " << bf_denom << endl;
         cout << "numerator" << endl;
-        MVN_Density_ZeroMean_print(zscores_c, offset);
+     //   MVN_Density_ZeroMean_print(zscores_c, offset);
         cout << "denom" << endl;
-        MVN_Density_ZeroMean_print(zscores_c, ld_c);
+     */
+     //   MVN_Density_ZeroMean_print(zscores_c, ld_c);
+
+        EigenSolver<MatrixXd> ld_c_es(ld_c);
+        MatrixXd ld_c_vector = ld_c_es.eigenvectors().real();
+        VectorXd ld_c_eigen = ld_c_es.eigenvalues().real();
+     //   DiagonalMatrix<double, set_size> ld_c_eigen_diag = ld_c_eigen.asDiagonal();
+        cout << "ld_c.vector" << endl;
+        cout <<  ld_c_vector << endl;
+
+        cout << "ld_c.eigen" << endl;
+        cout <<  ld_c_eigen << endl;
+        for(unsigned int j = 0; j < set_size; j++){
+            if(ld_c_eigen(j) < 0.001){
+               ld_c_eigen(j) = 0.001;
+            }
+        }
+
+        cout << "ld_c.eigen new" << endl;
+        cout <<  ld_c_eigen << endl;
+
+        MatrixXd ld_c_new = ld_c_vector*ld_c_eigen.asDiagonal()*ld_c_vector.inverse();
+        cout << "ld_c new" << endl;
+        cout <<  ld_c_new << endl;
+
+        EigenSolver<MatrixXd> offset_es(ld_c);
+        MatrixXd offset_vector = offset_es.eigenvectors().real();
+        VectorXd offset_eigen = offset_es.eigenvalues().real();
+        for(unsigned int j = 0; j < set_size; j++){
+            if(offset_eigen(j) < 0.001){
+               offset_eigen(j) = 0.001;
+            }
+        }
+
+        MatrixXd offset_new = offset_vector*offset_eigen.asDiagonal()*offset_vector.inverse();
+
+        cout << "offset raw" << endl;
+        cout <<  offset << endl;
+        cout << "offset new" << endl;
+        cout <<  offset_new << endl;
+
+        bf_num = MVN_Density_ZeroMean(zscores_c, offset_new);
+        bf_denom = MVN_Density_ZeroMean(zscores_c, ld_c_new);
     }
-*/
+
     return bf_num-bf_denom;
 }
 
@@ -223,7 +283,7 @@ void CasualSet_To_String(string& causal_string, vector<int>& causal_set){
 
 void Locus_Sampler(VectorXd& marginal, VectorXd& zscores, VectorXd& gammas, MatrixXd& annotations,  MatrixXd& ld_matrix, double& fullLikeli, double prior_variance, double  move_probability, int num_samples, int sampling_seed){
     unsigned int num_snps = zscores.size();
-    double log_runsum = -1e150;
+    double log_runsum = -1e250;
     VectorXd per_snp_priors(num_snps);
     random_device rd;
     mt19937 generator(rd());
@@ -366,7 +426,7 @@ void Locus_Importance_Sampler(VectorXd& marginal, vector<VectorXd>& zscores, Vec
             for (int i = 0;  i<num_sets ; i++) {
                 log_bayes_factor_pop = Calculate_LogBayesFactor(zscores[i], ld_matrix[i], causal_set, prior_variance);
                 if (std::isnan(log_bayes_factor_pop)) {
-                    log_bayes_factor_pop = -1e150;
+                    log_bayes_factor_pop = -1e250;
                     cout << "unstable set" << endl;
                 }
                 log_bayes_factor += log_bayes_factor_pop;
@@ -377,7 +437,7 @@ void Locus_Importance_Sampler(VectorXd& marginal, vector<VectorXd>& zscores, Vec
 
             }
         else{
-            log_bayes_factor =-1e150;
+            log_bayes_factor =-1e250;
             log_import_weight = Calc_Importance_logWeight(per_snp_priors, proposal, causal_set);
             log_result = log_bayes_factor + log_import_weight;
             log_importance_normalizer = LogSum(log_importance_normalizer, log_result);
@@ -385,7 +445,7 @@ void Locus_Importance_Sampler(VectorXd& marginal, vector<VectorXd>& zscores, Vec
         log_posterior_weight.push_back(log_result);
     }
     marginal.setZero();
-    marginal = marginal.array()+ -1e150;
+    marginal = marginal.array()+ -1e250;
     Marginalize_Importance_Sets(sampled_causal_sets, log_posterior_weight, log_importance_normalizer, marginal);
     fullLikeli += log_importance_normalizer;
 
@@ -479,9 +539,9 @@ void Marginalize_Sets(unordered_map<string,double>& causal_posteriors, VectorXd&
 void Enumerate_Posterior(VectorXd& Marginal, vector<VectorXd>& zscores, VectorXd& beta, MatrixXd& annotations,  vector<MatrixXd>& ld_matrix, int NC, double& fullLikeli, double prior_variance){
     int numsnps = zscores[0].size();
     int num_pops = zscores.size();
-    double runsum = -1e150;
+    double runsum = -1e250;
     for(int i =0 ; i < Marginal.size(); i++){
-        Marginal(i) = -1e150;
+        Marginal(i) = -1e250;
     }
 
     /* Determine optimal prior variances
@@ -513,7 +573,7 @@ void Enumerate_Posterior(VectorXd& Marginal, vector<VectorXd>& zscores, VectorXd
         for (int i = 0;  i<num_pops ; i++) {
             log_bayes_factor_pop=Calculate_LogBayesFactor(zscores[i], ld_matrix[i], causal_index_as_vector, prior_variance);
             if(std::isnan(log_bayes_factor_pop)){
-                log_bayes_factor_pop = -1e150;
+                log_bayes_factor_pop = -1e250;
             }
             log_bayes_factor += log_bayes_factor_pop;
         }
@@ -648,7 +708,7 @@ double EM_Run(CausalProbs &probabilites, int iter_max, vector<vector<VectorXd>> 
         Opt_in.probs = probabilites.probs_stacked;
         void *opt_ptr = &Opt_in;
         try {
-            Optimize_Nlopt(beta_run, -20, 20, beta_run[0], opt_ptr);
+            Optimize_Nlopt(beta_run, -200, 200, beta_run[0], opt_ptr);
 
         }catch (exception& e) {
            cout << "Optimization error encountered " << endl;
@@ -723,7 +783,7 @@ double PreCompute_Enrichment(int iter_max, vector<vector<VectorXd>> &Zscores,  V
         Opt_in.probs = probabilites.probs_stacked;
         void *opt_ptr = &Opt_in;
         try {
-            Optimize_Nlopt(beta_run, -20, 20, beta_run[0], opt_ptr);
+            Optimize_Nlopt(beta_run, -200, 200, beta_run[0], opt_ptr);
 
         }catch (exception& e) {
             cout << "Optimization error encountered " << endl;
