@@ -1,4 +1,9 @@
-# PAINTOR
+# patch description
+This is a copy of PAINTOR from https://github.com/gkichaev/PAINTOR_V3.0/ at 2017-03-27
+The file Functions_CoreModel.cpp was modified to fix the nan and unstable set warning problem, where ld matrix is recreate according to the paper by Rebonato and Jackel, “The most general methodology for creating a valid correlation matrix for risk management and option pricing purposes”, Journal of Risk, Vol 2, No 2, 2000, 
+
+# Following the PAINTOR description
+
 Probabilistic Annotation INtegraTOR
 
 ##UPDATE 01/07/17
