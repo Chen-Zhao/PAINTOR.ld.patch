@@ -215,6 +215,9 @@ double Calculate_LogBayesFactor(VectorXd& zscore, MatrixXd& ld_matrix, vector<in
 
         MatrixXd offset_new = offset_vector*offset_eigen.asDiagonal()*offset_vector.inverse();
 
+        offset_new = ld_c_new+prior_variance*(ld_c_new*ld_c_new);
+        
+        
         cout << "offset raw" << endl;
         cout <<  offset << endl;
         cout << "offset new" << endl;
